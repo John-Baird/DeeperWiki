@@ -13,7 +13,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     let details = "";
     try {
       const payload = await res.json();
-      details = payload?.error || payload?.details || "";
+      details = payload?.details || payload?.error || "";
     } catch {
       // keep default
     }
