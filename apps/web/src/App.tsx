@@ -143,7 +143,34 @@ export default function App() {
       <section className="split">
         <article className="response-panel">
           <h2>Your LLM Response</h2>
-          <pre>{ourResponse || "Run Scan single repo to populate this panel."}</pre>
+          {!context?.aiSummary ? (
+            <pre>Run Scan single repo to populate this panel.</pre>
+          ) : (
+            <div className="our-response">
+              <section>
+                <h3>Project Summary</h3>
+                <p>{context.aiSummary.projectSummary}</p>
+              </section>
+              <section>
+                <h3>Architecture Map</h3>
+                <p>{context.aiSummary.architectureMap}</p>
+              </section>
+              <section>
+                <h3>Conventions</h3>
+                <p>{context.aiSummary.conventions}</p>
+              </section>
+              <section>
+                <h3>Key Files</h3>
+                <ul>
+                  {context.aiSummary.keyFiles.map((item) => (
+                    <li key={item.file}>
+                      <strong>{item.file}</strong>: {item.reason}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+          )}
         </article>
         <article className="response-panel">
           <h2>DeepWiki LLM Response</h2>
