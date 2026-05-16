@@ -1,9 +1,8 @@
 const fs = require("fs/promises");
 const os = require("os");
-const path = require("path");
-const simpleGit = require("simple-git");
 const { z } = require("zod");
 const { analyzeRepo } = require("./lib");
+const { fetchRepoToDir } = require("./repo-fetch");
 
 const bodySchema = z.object({
   repoUrl: z.string().url()
@@ -225,12 +224,11 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: "Invalid repoUrl" };
   }
 
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "repo-context-"));
-  const git = simpleGit();
+  let fetched = null;
 
   try {
-    await git.clone(parsed.data.repoUrl, tempDir, ["--depth", "1", "--single-branch"]);
-    const context = await analyzeRepo(parsed.data.repoUrl, tempDir);
+    fetched = await fetchRepoToDir(parsed.data.repoUrl, os.tmpdir());
+    const context = await analyzeRepo(parsed.data.repoUrl, fetched.repoDir);
     const ourResponse = [
       `Project Summary: ${context.aiSummary?.projectSummary || ""}`,
       `Architecture Map: ${context.aiSummary?.architectureMap || ""}`,
@@ -299,6 +297,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({ error: "Benchmark failed", details: error instanceof Error ? error.message : String(error) })
     };
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    if (fetched?.workDir) {
+      await fs.rm(fetched.workDir, { recursive: true, force: true });
+    }
   }
 };

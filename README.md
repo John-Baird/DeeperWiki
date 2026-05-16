@@ -117,5 +117,6 @@ Optional environment variables:
 - `VITE_API_BASE`
 - `DEEPWIKI_TOKEN` or `DEVIN_API_KEY` (for authenticated DeepWiki/Devin access)
 - `DEEPWIKI_ENDPOINT` (defaults to `https://mcp.devin.ai/mcp` when token is present, otherwise `https://mcp.deepwiki.com/mcp`)
+- `GITHUB_TOKEN` (optional, improves GitHub API limits for Netlify ZIP-based repository fetches)
 
 The web UI lets users enter a GitHub repo URL and receive analysis output directly.
