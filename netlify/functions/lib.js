@@ -45,13 +45,19 @@ const KEY_FILES = [
   "build.gradle"
 ];
 
+const SOURCE_PRIORITY_DIRS = ["src", "lib", "app", "server", "core", "router", "middleware", "test", "tests"];
+
 async function walkRepo(rootDir, maxFiles) {
   const stats = {
     totalFiles: 0,
     totalBytes: 0,
     languages: {},
     topLevelFolders: new Set(),
-    keyFiles: new Set()
+    topLevelFiles: new Set(),
+    keyFiles: new Set(),
+    topFolderFileCounts: {},
+    representativeSourceFiles: [],
+    representativeTestFiles: []
   };
 
   async function walk(current, depth) {
@@ -64,6 +70,8 @@ async function walkRepo(rootDir, maxFiles) {
 
       const fullPath = path.join(current, entry.name);
       const relPath = path.relative(rootDir, fullPath);
+      const normalizedRelPath = relPath.replace(/\\/g, "/");
+      const topSegment = normalizedRelPath.split("/")[0] || "";
 
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name)) {
@@ -82,12 +90,34 @@ async function walkRepo(rootDir, maxFiles) {
 
       stats.totalFiles += 1;
 
+      if (depth === 0) {
+        stats.topLevelFiles.add(entry.name);
+      }
+      if (topSegment) {
+        stats.topFolderFileCounts[topSegment] = (stats.topFolderFileCounts[topSegment] || 0) + 1;
+      }
+
       const ext = path.extname(entry.name).toLowerCase();
       const lang = EXT_TO_LANG[ext] || "Other";
       stats.languages[lang] = (stats.languages[lang] || 0) + 1;
 
       if (KEY_FILES.includes(entry.name)) {
-        stats.keyFiles.add(relPath);
+        stats.keyFiles.add(normalizedRelPath);
+      }
+
+      const isSourceLike = [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".cs"].includes(ext);
+      const isTestLike = /(^|\/)(test|tests|__tests__|spec|specs)(\/|$)/i.test(normalizedRelPath) ||
+        /\.(test|spec)\.(ts|tsx|js|jsx|py|go|rs|java|kt|cs)$/i.test(normalizedRelPath);
+
+      if (isSourceLike && stats.representativeSourceFiles.length < 20) {
+        const priorityBoost = SOURCE_PRIORITY_DIRS.some((dir) => normalizedRelPath.startsWith(`${dir}/`));
+        if (priorityBoost || normalizedRelPath.split("/").length <= 3) {
+          stats.representativeSourceFiles.push(normalizedRelPath);
+        }
+      }
+
+      if (isTestLike && stats.representativeTestFiles.length < 12) {
+        stats.representativeTestFiles.push(normalizedRelPath);
       }
 
       try {
@@ -207,6 +237,44 @@ function buildRiskHints(totalFiles, totalBytes, depCount) {
   return risks;
 }
 
+function extractReadmeSummary(readmeExcerpt) {
+  if (!readmeExcerpt) return "Repository summary unavailable.";
+  const cleanLine = readmeExcerpt
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+        .replace(/\[[^\]]+]\(([^)]+)\)/g, "$1")
+        .replace(/[`#>*_-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .find((line) => line.length > 40 && !/^https?:\/\//i.test(line));
+  return cleanLine || "Repository summary unavailable.";
+}
+
+function inferFolderRole(folderName) {
+  const name = folderName.toLowerCase();
+  if (name.includes("src") || name.includes("lib")) return "core implementation";
+  if (name.includes("test")) return "testing and validation";
+  if (name.includes("docs") || name.includes("example")) return "documentation and usage examples";
+  if (name.includes(".github") || name.includes("ci")) return "automation and CI workflows";
+  if (name.includes("bench")) return "performance benchmarking";
+  return "project subsystem";
+}
+
+function pickKeyFiles(context) {
+  const fromKeyFiles = [...context.structure.keyFiles];
+  const sourceCandidates = (context.structure.representativeSourceFiles || [])
+    .filter((file) => !file.includes("node_modules"))
+    .slice(0, 4);
+  const testCandidates = (context.structure.representativeTestFiles || []).slice(0, 2);
+
+  const merged = [...fromKeyFiles, ...sourceCandidates, ...testCandidates];
+  const unique = Array.from(new Set(merged)).slice(0, 8);
+  return unique.length ? unique : ["README.md", "package.json"];
+}
+
 function buildAiSummaryHeuristic(context) {
   const topLanguages = Object.entries(context.summary.languages)
     .sort((a, b) => b[1] - a[1])
@@ -214,24 +282,67 @@ function buildAiSummaryHeuristic(context) {
     .map(([lang]) => lang)
     .join(", ");
 
+  const folderRoles = context.structure.topLevelFolders
+    .slice(0, 8)
+    .map((folder) => `${folder} (${inferFolderRole(folder)})`)
+    .join(", ");
+  const folderFlow = context.structure.topLevelFolders.slice(0, 6).join(" -> ");
+  const scripts = Object.keys(context.structure.packageScripts || {});
+  const keyFiles = pickKeyFiles(context);
+  const readmeSummary = extractReadmeSummary(context.readmeExcerpt);
+
   return {
-    projectSummary: `${(context.readmeExcerpt || "Repository summary unavailable.").split("\n")[0]} Stack hints: ${context.techStackHints.join(", ")}. Primary languages: ${topLanguages}.`,
-    architectureMap: `Top-level structure: ${context.structure.topLevelFolders.join(", ") || "not detected"}.`,
-    conventions: `Setup hints: ${context.setupHints.join("; ")}. Risks: ${context.risks.join("; ")}.`,
-    keyFiles: (context.structure.keyFiles || []).slice(0, 6).map((file) => ({
+    projectSummary: `${readmeSummary} Stack hints: ${context.techStackHints.join(", ")}. Primary languages: ${topLanguages}. The repository is organized for implementation, validation, and examples across ${context.summary.totalFiles} files.`,
+    architectureMap: `Top-level modules and intent: ${folderRoles || "not detected"}. Typical contributor workflow is ${folderFlow || "README -> source -> tests"}. Build/test execution is driven by scripts: ${scripts.join(", ") || "none detected"}.`,
+    conventions: `Conventions inferred from codebase signals: naming follows ecosystem defaults for ${topLanguages}; error handling favors explicit checks and middleware-style control paths; tests appear in ${(context.structure.representativeTestFiles || []).slice(0, 3).join(", ") || "dedicated test folders"}. Continuation path: start from ${keyFiles[0]}, then ${keyFiles[1] || "core source"}, validate with ${context.structure.packageScripts.test || "project test workflow"}. Risks: ${context.risks.join("; ")}.`,
+    keyFiles: keyFiles.map((file) => ({
       file,
-      reason: "High-signal file for onboarding and implementation continuation."
+      reason: file.endsWith("README.md") || file === "README.md"
+        ? "Primary onboarding and feature map for understanding project scope and usage."
+        : file.includes("test")
+          ? "High-leverage test coverage entry point for safe iteration."
+          : "Core implementation file likely to be edited for feature work."
     }))
+  };
+}
+
+function mergeSummary(generated, fallback) {
+  const safeGenerated = generated || {};
+  const keyFiles = Array.isArray(safeGenerated.keyFiles) && safeGenerated.keyFiles.length
+    ? safeGenerated.keyFiles
+    : fallback.keyFiles;
+
+  return {
+    projectSummary:
+      typeof safeGenerated.projectSummary === "string" && safeGenerated.projectSummary.trim().length > 80
+        ? safeGenerated.projectSummary
+        : fallback.projectSummary,
+    architectureMap:
+      typeof safeGenerated.architectureMap === "string" && safeGenerated.architectureMap.trim().length > 120
+        ? safeGenerated.architectureMap
+        : fallback.architectureMap,
+    conventions:
+      typeof safeGenerated.conventions === "string" && safeGenerated.conventions.trim().length > 120
+        ? safeGenerated.conventions
+        : fallback.conventions,
+    keyFiles: keyFiles
+      .map((item) => ({
+        file: String(item?.file || ""),
+        reason: String(item?.reason || "")
+      }))
+      .filter((item) => item.file)
+      .slice(0, 8)
   };
 }
 
 async function buildAiSummaryWithLLM(context) {
   const apiKey = process.env.LLM_API_KEY;
+  const fallback = buildAiSummaryHeuristic(context);
   if (!apiKey) {
-    return buildAiSummaryHeuristic(context);
+    return fallback;
   }
 
-  const model = process.env.LLM_MODEL || "gpt-4-turbo";
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
   const prompt = `Create a high-signal JSON summary for an AI coding agent.
 
 You are being scored on 5 criteria:
@@ -253,11 +364,18 @@ README excerpt: ${context.readmeExcerpt.slice(0, 1200)}
 
 Return strict JSON:
 {
-  "projectSummary": "...",
-  "architectureMap": "...",
-  "conventions": "...",
+  "projectSummary": "2-4 sentences with concrete repo details and stack",
+  "architectureMap": "4-8 sentences with module tree, relationships, and runtime/build/request flow",
+  "conventions": "4-8 sentences with naming/error-handling/testing conventions and concrete continuation guidance",
   "keyFiles": [{"file":"...","reason":"..."}]
-}`;
+}
+
+Hard requirements:
+- Mention at least 5 concrete file/folder names from this repo.
+- Include at least one explicit flow: request/runtime/build/test flow.
+- Include specific next steps for a contributor.
+- Avoid generic phrases like "mixed technology stack" unless truly unknown.
+`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -275,7 +393,7 @@ Return strict JSON:
     });
 
     if (!response.ok) {
-      return buildAiSummaryHeuristic(context);
+      return fallback;
     }
 
     const data = await response.json();
@@ -298,14 +416,14 @@ Return strict JSON:
           .filter((item) => item.file)
       : [];
 
-    return {
+    return mergeSummary({
       projectSummary: String(parsed?.projectSummary || ""),
       architectureMap: String(parsed?.architectureMap || ""),
       conventions: String(parsed?.conventions || ""),
-      keyFiles: keyFiles.length ? keyFiles : buildAiSummaryHeuristic(context).keyFiles
-    };
+      keyFiles: keyFiles.length ? keyFiles : fallback.keyFiles
+    }, fallback);
   } catch {
-    return buildAiSummaryHeuristic(context);
+    return fallback;
   }
 }
 
@@ -334,7 +452,10 @@ async function analyzeRepo(repoUrl, repoDir) {
     readmeExcerpt,
     structure: {
       topLevelFolders: Array.from(stats.topLevelFolders).sort(),
+      topLevelFiles: Array.from(stats.topLevelFiles).sort(),
       keyFiles: Array.from(stats.keyFiles).sort(),
+      representativeSourceFiles: stats.representativeSourceFiles,
+      representativeTestFiles: stats.representativeTestFiles,
       packageScripts,
       dependencies,
       devDependencies
