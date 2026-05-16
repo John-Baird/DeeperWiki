@@ -48,7 +48,8 @@ async function callDeepWikiTool(name, argumentsPayload) {
   const text = await response.text();
   try {
     const parsed = JSON.parse(text);
-    if (typeof parsed?.result === "string") return parsed.result;
+    const normalized = normalizeDeepWikiResult(parsed?.result);
+    if (normalized) return normalized;
   } catch {
     // continue
   }
@@ -61,10 +62,41 @@ async function callDeepWikiTool(name, argumentsPayload) {
     if (!payload || payload === "[DONE]") continue;
     try {
       const event = JSON.parse(payload);
-      if (typeof event?.result === "string") last = event.result;
+      const normalized = normalizeDeepWikiResult(event?.result);
+      if (normalized) last = normalized;
     } catch {}
   }
   return last || "";
+}
+
+function normalizeDeepWikiResult(result) {
+  if (!result) return "";
+  if (typeof result === "string") return result;
+  if (Array.isArray(result)) return result.map((item) => normalizeDeepWikiResult(item)).filter(Boolean).join("\n\n");
+  if (typeof result === "object") {
+    if (typeof result.text === "string") return result.text;
+    if (typeof result.result === "string") return result.result;
+    if (Array.isArray(result.content)) {
+      return result.content
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            if (typeof item.text === "string") return item.text;
+            if (typeof item.content === "string") return item.content;
+            return JSON.stringify(item);
+          }
+          return String(item);
+        })
+        .join("\n\n");
+    }
+    if (result.structuredContent) {
+      return typeof result.structuredContent === "string"
+        ? result.structuredContent
+        : JSON.stringify(result.structuredContent, null, 2);
+    }
+    return JSON.stringify(result, null, 2);
+  }
+  return String(result);
 }
 
 exports.handler = async (event) => {

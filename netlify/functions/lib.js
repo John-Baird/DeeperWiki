@@ -113,7 +113,7 @@ async function readTextFile(filePath, maxChars) {
 }
 
 async function findReadme(repoDir) {
-  const candidates = ["README.md", "readme.md", "README.MD"];
+  const candidates = ["README.md", "Readme.md", "readme.md", "README.MD", "README.rst", "README.txt"];
   for (const name of candidates) {
     const candidate = path.join(repoDir, name);
     try {
