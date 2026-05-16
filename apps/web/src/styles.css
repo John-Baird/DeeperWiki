@@ -1,0 +1,151 @@
+:root {
+  color-scheme: light;
+  font-family: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  background-color: #f8f5ef;
+  color: #1e1a16;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at 20% 20%, #f1e7d7, transparent 55%),
+    radial-gradient(circle at 80% 0%, #dce7f2, transparent 45%),
+    #f8f5ef;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 12px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  margin: 0;
+  color: #7a6d5d;
+}
+
+h1 {
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  margin: 0;
+}
+
+.subhead {
+  max-width: 700px;
+  margin: 0;
+  font-size: 1.1rem;
+  color: #4b4035;
+}
+
+.panel {
+  background: #fff7ea;
+  border: 1px solid #eadbc3;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 12px 24px rgba(35, 28, 20, 0.08);
+  display: grid;
+  gap: 16px;
+}
+
+label {
+  font-weight: 600;
+}
+
+input {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #dccbb2;
+  font-size: 1rem;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+button {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: none;
+  font-weight: 600;
+  background: #1e1a16;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(30, 26, 22, 0.2);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button.secondary {
+  background: #c2643f;
+}
+
+button.ghost {
+  background: transparent;
+  color: #1e1a16;
+  border: 1px solid #cdbca6;
+}
+
+.error {
+  color: #9b2c2c;
+  font-weight: 600;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.score {
+  background: #1e1a16;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.output {
+  background: #1e1a16;
+  color: #f7efe2;
+  padding: 16px;
+  border-radius: 12px;
+  max-height: 520px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 32px 16px 64px;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+}

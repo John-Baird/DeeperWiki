@@ -1,0 +1,22 @@
+{
+  "name": "repo-context-system",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k \"npm --workspace apps/api run dev\" \"npm --workspace apps/web run dev\"",
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "build:web": "npm --workspace apps/web run build",
+    "build:api": "npm --workspace apps/api run build",
+    "lint": "echo no lint configured"
+  },
+  "dependencies": {
+    "simple-git": "^3.24.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

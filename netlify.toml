@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build:web"
+  publish = "apps/web/dist"
+  functions = "netlify/functions"
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  framework = "vite"
+
+[[redirects]]
+  from = "/api/analyze"
+  to = "/.netlify/functions/analyze"
+  status = 200
+
+[[redirects]]
+  from = "/api/benchmark"
+  to = "/.netlify/functions/benchmark"
+  status = 200
