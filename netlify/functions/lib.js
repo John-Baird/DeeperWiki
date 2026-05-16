@@ -207,7 +207,7 @@ function buildRiskHints(totalFiles, totalBytes, depCount) {
   return risks;
 }
 
-function buildAiSummary(context) {
+function buildAiSummaryHeuristic(context) {
   const topLanguages = Object.entries(context.summary.languages)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
@@ -223,6 +223,90 @@ function buildAiSummary(context) {
       reason: "High-signal file for onboarding and implementation continuation."
     }))
   };
+}
+
+async function buildAiSummaryWithLLM(context) {
+  const apiKey = process.env.LLM_API_KEY;
+  if (!apiKey) {
+    return buildAiSummaryHeuristic(context);
+  }
+
+  const model = process.env.LLM_MODEL || "gpt-4-turbo";
+  const prompt = `Create a high-signal JSON summary for an AI coding agent.
+
+You are being scored on 5 criteria:
+1) Readability
+2) Workflow/tree understanding
+3) Continuation readiness
+4) Design understanding
+5) Coverage completeness
+
+Use concrete repository details from this context:
+Repo URL: ${context.summary.repoUrl}
+Languages: ${Object.keys(context.summary.languages).join(", ")}
+Top-level folders: ${context.structure.topLevelFolders.join(", ")}
+Key files: ${context.structure.keyFiles.join(", ")}
+Scripts: ${Object.keys(context.structure.packageScripts).join(", ")}
+Setup hints: ${context.setupHints.join("; ")}
+Risks: ${context.risks.join("; ")}
+README excerpt: ${context.readmeExcerpt.slice(0, 1200)}
+
+Return strict JSON:
+{
+  "projectSummary": "...",
+  "architectureMap": "...",
+  "conventions": "...",
+  "keyFiles": [{"file":"...","reason":"..."}]
+}`;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 1800
+      })
+    });
+
+    if (!response.ok) {
+      return buildAiSummaryHeuristic(context);
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const jsonText = content.startsWith("```")
+      ? content
+          .split("```")
+          .filter((s) => s && !s.startsWith("json"))
+          .join("")
+          .trim()
+      : content.trim();
+
+    const parsed = JSON.parse(jsonText);
+    const keyFiles = Array.isArray(parsed?.keyFiles)
+      ? parsed.keyFiles
+          .map((item) => ({
+            file: String(item?.file || ""),
+            reason: String(item?.reason || "")
+          }))
+          .filter((item) => item.file)
+      : [];
+
+    return {
+      projectSummary: String(parsed?.projectSummary || ""),
+      architectureMap: String(parsed?.architectureMap || ""),
+      conventions: String(parsed?.conventions || ""),
+      keyFiles: keyFiles.length ? keyFiles : buildAiSummaryHeuristic(context).keyFiles
+    };
+  } catch {
+    return buildAiSummaryHeuristic(context);
+  }
 }
 
 async function analyzeRepo(repoUrl, repoDir) {
@@ -260,7 +344,7 @@ async function analyzeRepo(repoUrl, repoDir) {
     risks
   };
 
-  context.aiSummary = buildAiSummary(context);
+  context.aiSummary = await buildAiSummaryWithLLM(context);
   return context;
 }
 
@@ -338,5 +422,5 @@ module.exports = {
   analyzeRepo,
   generateDeepWikiProxy,
   scoreAgainstProxy,
-  buildAiSummary
+  buildAiSummary: buildAiSummaryHeuristic
 };
