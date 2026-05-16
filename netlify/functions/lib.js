@@ -1,5 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
+const AdmZip = require("adm-zip");
 
 const SKIP_DIRS = new Set([
   ".git",
@@ -132,6 +133,85 @@ async function readPackageJson(repoDir) {
     return JSON.parse(content);
   } catch {
     return null;
+  }
+}
+
+function parseGitHubRepo(repoUrl) {
+  const url = new URL(repoUrl);
+  const host = url.hostname.toLowerCase();
+  if (host !== "github.com" && host !== "www.github.com") {
+    return null;
+  }
+
+  const [owner, repoWithSuffix] = url.pathname.split("/").filter(Boolean);
+  if (!owner || !repoWithSuffix) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo: repoWithSuffix.replace(/\.git$/i, "")
+  };
+}
+
+async function materializeGitHubRepo(repoUrl, targetDir) {
+  const parsed = parseGitHubRepo(repoUrl);
+  if (!parsed) {
+    throw new Error("Only GitHub repository URLs are supported in deployed functions.");
+  }
+
+  const metadataResponse = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "repo-context-system"
+    }
+  });
+
+  if (!metadataResponse.ok) {
+    throw new Error(`GitHub repository lookup failed (${metadataResponse.status}).`);
+  }
+
+  const metadata = await metadataResponse.json();
+  const defaultBranch = metadata.default_branch;
+  if (!defaultBranch) {
+    throw new Error("GitHub repository metadata did not include a default branch.");
+  }
+
+  const archiveResponse = await fetch(
+    `https://codeload.github.com/${parsed.owner}/${parsed.repo}/zip/refs/heads/${encodeURIComponent(defaultBranch)}`,
+    {
+      headers: {
+        "User-Agent": "repo-context-system"
+      }
+    }
+  );
+
+  if (!archiveResponse.ok) {
+    throw new Error(`GitHub repository archive download failed (${archiveResponse.status}).`);
+  }
+
+  const archive = Buffer.from(await archiveResponse.arrayBuffer());
+  const zip = new AdmZip(archive);
+
+  await fs.mkdir(targetDir, { recursive: true });
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) {
+      continue;
+    }
+
+    const parts = entry.entryName.split("/").filter(Boolean).slice(1);
+    if (parts.length === 0) {
+      continue;
+    }
+
+    const relativePath = path.normalize(parts.join(path.sep));
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      continue;
+    }
+
+    const filePath = path.join(targetDir, relativePath);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, entry.getData());
   }
 }
 
@@ -420,6 +500,7 @@ function scoreAgainstProxy(proxy, context) {
 
 module.exports = {
   analyzeRepo,
+  materializeGitHubRepo,
   generateDeepWikiProxy,
   scoreAgainstProxy,
   buildAiSummary: buildAiSummaryHeuristic

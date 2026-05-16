@@ -1,9 +1,8 @@
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
-const simpleGit = require("simple-git");
 const { z } = require("zod");
-const { analyzeRepo } = require("./lib");
+const { analyzeRepo, materializeGitHubRepo } = require("./lib");
 
 const bodySchema = z.object({
   repoUrl: z.string().url()
@@ -226,10 +225,9 @@ exports.handler = async (event) => {
   }
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "repo-context-"));
-  const git = simpleGit();
 
   try {
-    await git.clone(parsed.data.repoUrl, tempDir, ["--depth", "1", "--single-branch"]);
+    await materializeGitHubRepo(parsed.data.repoUrl, tempDir);
     const context = await analyzeRepo(parsed.data.repoUrl, tempDir);
     const ourResponse = [
       `Project Summary: ${context.aiSummary?.projectSummary || ""}`,

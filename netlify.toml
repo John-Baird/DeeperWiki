@@ -3,6 +3,12 @@
   publish = "apps/web/dist"
   functions = "netlify/functions"
 
+[functions.benchmark]
+  timeout = 26
+
+[functions.analyze]
+  timeout = 26
+
 [dev]
   command = "npm run dev"
   targetPort = 5173
