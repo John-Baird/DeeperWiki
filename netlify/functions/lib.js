@@ -315,15 +315,15 @@ function mergeSummary(generated, fallback) {
   return {
     projectSummary:
       typeof safeGenerated.projectSummary === "string" && safeGenerated.projectSummary.trim().length > 80
-        ? safeGenerated.projectSummary
+        ? sanitizeSummaryText(safeGenerated.projectSummary)
         : fallback.projectSummary,
     architectureMap:
       typeof safeGenerated.architectureMap === "string" && safeGenerated.architectureMap.trim().length > 120
-        ? safeGenerated.architectureMap
+        ? sanitizeSummaryText(safeGenerated.architectureMap)
         : fallback.architectureMap,
     conventions:
       typeof safeGenerated.conventions === "string" && safeGenerated.conventions.trim().length > 120
-        ? safeGenerated.conventions
+        ? sanitizeSummaryText(safeGenerated.conventions)
         : fallback.conventions,
     keyFiles: keyFiles
       .map((item) => ({
@@ -335,6 +335,20 @@ function mergeSummary(generated, fallback) {
   };
 }
 
+function sanitizeSummaryText(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "")
+    .replace(/\[[^\]]+:\d+(?:-\d+)?\]\(\)/g, "")
+    .replace(/^\s*\|.*\|\s*$/gm, "")
+    .replace(/mermaid/gi, "")
+    .replace(/<details>[\s\S]*?<\/details>/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function buildAiSummaryWithLLM(context) {
   const apiKey = process.env.LLM_API_KEY;
   const fallback = buildAiSummaryHeuristic(context);
@@ -342,8 +356,8 @@ async function buildAiSummaryWithLLM(context) {
     return fallback;
   }
 
-  const model = process.env.LLM_MODEL || "gpt-4o-mini";
-  const prompt = `Create a high-signal JSON summary for an AI coding agent.
+  const model = process.env.LLM_MODEL || "gpt-5-mini";
+  const prompt = `Create a high-signal JSON summary for an AI coding agent and a new contributor.
 
 You are being scored on 5 criteria:
 1) Readability
@@ -364,17 +378,25 @@ README excerpt: ${context.readmeExcerpt.slice(0, 1200)}
 
 Return strict JSON:
 {
-  "projectSummary": "2-4 sentences with concrete repo details and stack",
-  "architectureMap": "4-8 sentences with module tree, relationships, and runtime/build/request flow",
-  "conventions": "4-8 sentences with naming/error-handling/testing conventions and concrete continuation guidance",
+  "projectSummary": "2-4 practical sentences with concrete repo details and stack",
+  "architectureMap": "4-7 practical sentences explaining module tree, high-level relationships, and developer workflow",
+  "conventions": "4-7 practical sentences explaining naming/error-handling/testing conventions and concrete continuation guidance",
   "keyFiles": [{"file":"...","reason":"..."}]
 }
 
 Hard requirements:
 - Mention at least 5 concrete file/folder names from this repo.
-- Include at least one explicit flow: request/runtime/build/test flow.
+- Include at least one explicit practical flow: setup -> edit -> validate.
 - Include specific next steps for a contributor.
 - Avoid generic phrases like "mixed technology stack" unless truly unknown.
+- Keep it understandable for an engineer onboarding quickly.
+
+Do NOT include:
+- code blocks
+- Mermaid or diagram syntax
+- line-by-line code internals
+- giant API/member tables
+- file:line citations
 `;
 
   try {
