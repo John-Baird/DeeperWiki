@@ -17,3 +17,8 @@
   from = "/api/benchmark"
   to = "/.netlify/functions/benchmark"
   status = 200
+
+[[redirects]]
+  from = "/api/deepwiki"
+  to = "/.netlify/functions/deepwiki"
+  status = 200

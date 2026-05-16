@@ -207,6 +207,24 @@ function buildRiskHints(totalFiles, totalBytes, depCount) {
   return risks;
 }
 
+function buildAiSummary(context) {
+  const topLanguages = Object.entries(context.summary.languages)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([lang]) => lang)
+    .join(", ");
+
+  return {
+    projectSummary: `${(context.readmeExcerpt || "Repository summary unavailable.").split("\n")[0]} Stack hints: ${context.techStackHints.join(", ")}. Primary languages: ${topLanguages}.`,
+    architectureMap: `Top-level structure: ${context.structure.topLevelFolders.join(", ") || "not detected"}.`,
+    conventions: `Setup hints: ${context.setupHints.join("; ")}. Risks: ${context.risks.join("; ")}.`,
+    keyFiles: (context.structure.keyFiles || []).slice(0, 6).map((file) => ({
+      file,
+      reason: "High-signal file for onboarding and implementation continuation."
+    }))
+  };
+}
+
 async function analyzeRepo(repoUrl, repoDir) {
   const stats = await walkRepo(repoDir, 4000);
   const readmePath = await findReadme(repoDir);
@@ -221,7 +239,7 @@ async function analyzeRepo(repoUrl, repoDir) {
   const setupHints = buildSetupHints(packageScripts, pkg && pkg.main);
   const risks = buildRiskHints(stats.totalFiles, stats.totalBytes, dependencies.length);
 
-  return {
+  const context = {
     summary: {
       repoUrl,
       analyzedAt: new Date().toISOString(),
@@ -241,6 +259,9 @@ async function analyzeRepo(repoUrl, repoDir) {
     setupHints,
     risks
   };
+
+  context.aiSummary = buildAiSummary(context);
+  return context;
 }
 
 function generateDeepWikiProxy(context) {
@@ -316,5 +337,6 @@ function scoreAgainstProxy(proxy, context) {
 module.exports = {
   analyzeRepo,
   generateDeepWikiProxy,
-  scoreAgainstProxy
+  scoreAgainstProxy,
+  buildAiSummary
 };

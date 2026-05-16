@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 
+type DatabaseInstance = InstanceType<typeof Database>;
+
 export type StoredResult = {
   id: number;
   repoUrl: string;
@@ -10,7 +12,7 @@ export type StoredResult = {
   benchmarkJson: string | null;
 };
 
-export function openDb(dbPath: string): Database.Database {
+export function openDb(dbPath: string): DatabaseInstance {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -31,7 +33,7 @@ export function openDb(dbPath: string): Database.Database {
 }
 
 export function saveResult(
-  db: Database.Database,
+  db: DatabaseInstance,
   repoUrl: string,
   analysisJson: string,
   benchmarkJson: string | null
@@ -44,7 +46,7 @@ export function saveResult(
   return Number(info.lastInsertRowid);
 }
 
-export function listResults(db: Database.Database, limit: number): StoredResult[] {
+export function listResults(db: DatabaseInstance, limit: number): StoredResult[] {
   const stmt = db.prepare(
     "SELECT id, repo_url as repoUrl, created_at as createdAt, analysis_json as analysisJson, benchmark_json as benchmarkJson " +
       "FROM analysis_results ORDER BY id DESC LIMIT ?"

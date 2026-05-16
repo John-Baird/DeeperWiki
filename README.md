@@ -1,47 +1,121 @@
-# Repo Context System
+# Repo Context Engine
 
-Generates structured context for AI coding agents from a GitHub repository, plus a simple DeepWiki-style benchmark proxy. Includes a local API server and a web UI, plus Netlify Functions for a one-click deployment path.
+Analyze any public GitHub repo and generate structured context for AI coding agents.
 
-## Features
-- Structured JSON context suitable for agent prompts
-- Repo analysis with file stats, tech stack hints, and key files
-- DeepWiki-style document proxy and coverage scoring
-- Local API server with history storage
-- Web UI to run analysis and download results
-- Netlify Functions for a live deployment
+This project includes:
+- Part 1: Context engine (`/api/analyze`)
+- Part 2: DeepWiki benchmark + reproducible multi-repo eval (`/api/benchmark`, `/api/eval`)
+- Part 3: Deployable web app (`apps/web`) + serverless API (`netlify/functions`)
 
-## Structure
-- apps/api: local API server
-- apps/web: web UI
-- netlify/functions: serverless API for Netlify deploys
-- packages: shared types and utilities
+## What It Produces
 
-## Local setup
-1) Install dependencies: npm install
-2) Start dev servers: npm run dev
-3) Open the web UI and submit a repo URL
+For each repository URL, the engine returns:
+- Project summary (purpose, stack, organization)
+- Architecture map (major directories/modules and relationships)
+- Conventions (naming/error-handling/testing signals)
+- Key files with reasons (high-signal onboarding targets)
 
-Environment variables (optional):
-- API server: PORT, DB_PATH, CORS_ORIGIN
-- Web UI: VITE_API_BASE
+The result is emitted as consistent JSON for agent consumption.
 
-## API endpoints (local server)
-- POST /api/analyze { repoUrl }
-- POST /api/benchmark { repoUrl }
-- GET /api/history
-- GET /api/health
+## Monorepo Layout
 
-## Benchmark notes
-The benchmark output includes a DeepWiki-style document proxy and a heuristic coverage score. This is not a real DeepWiki run, but provides a structured comparison surface for automation.
+```
+apps/
+  api/          Express API + SQLite history + eval runner
+  web/          React + Vite UI
+packages/
+  core/         Analysis engine, AI summary, DeepWiki comparison rubric
+netlify/
+  functions/    Serverless endpoints for deploy
+reference/
+  deepwiki-mcp.md
+  eval-repos.md
+```
 
-## Deploy to Netlify (zip upload)
-1) Install dependencies locally and run npm run build:web
-2) Zip the repository folder
-3) In Netlify, set:
-   - Build command: npm run build:web
-   - Publish directory: apps/web/dist
-   - Functions directory: netlify/functions
-4) Set VITE_API_BASE to /api in the Netlify environment
-5) Deploy
+## Local Run
 
-For production use, consider hosting the API server separately and pointing VITE_API_BASE to that URL.
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Default local URLs:
+- Web: `http://localhost:5173`
+- API: `http://localhost:3001`
+
+## API Endpoints
+
+- `POST /api/analyze` body `{ "repoUrl": "https://github.com/owner/repo" }`
+- `POST /api/benchmark` body `{ "repoUrl": "https://github.com/owner/repo" }`
+- `POST /api/deepwiki` body `{ "repoUrl": "https://github.com/owner/repo" }`
+- `POST /api/eval` body `{ "repoUrls": ["...", "...", "..."] }` (3-10 repos)
+- `GET /api/history`
+- `GET /api/health`
+
+## Reproducible Eval (Part 2)
+
+Run benchmark across 3+ public repos:
+
+```bash
+npm --workspace apps/api run eval
+```
+
+Default benchmark repos:
+- `https://github.com/honojs/hono`
+- `https://github.com/langchain-ai/langchain`
+- `https://github.com/vercel/next.js`
+
+Or pass your own:
+
+```bash
+npm --workspace apps/api run eval https://github.com/expressjs/express https://github.com/pallets/flask https://github.com/facebook/react
+```
+
+Artifacts are written to:
+- `apps/api/data/eval-latest.json`
+- `apps/api/data/eval-latest.md`
+
+Scoring dimensions:
+- Structured Output
+- Architecture Coverage
+- Onboarding Actionability
+- Convention Signal
+- Agent Readability
+
+## Latest Local Benchmark Snapshot
+
+From `apps/api/data/eval-latest.md`:
+- express: ours 96 vs DeepWiki 80
+- flask: ours 88 vs DeepWiki 80
+- react: ours 96 vs DeepWiki 80
+- aggregate: ours 93 vs DeepWiki 80
+
+## Build
+
+```bash
+npm run build
+```
+
+This builds:
+1. `packages/core`
+2. `apps/api`
+3. `apps/web`
+
+## Deploy (Part 3)
+
+### Netlify
+
+Set in Netlify:
+- Build command: `npm run build:web`
+- Publish directory: `apps/web/dist`
+- Functions directory: `netlify/functions`
+
+Optional environment variables:
+- `LLM_API_KEY`
+- `LLM_MODEL`
+- `VITE_API_BASE`
+- `DEEPWIKI_TOKEN` or `DEVIN_API_KEY` (for authenticated DeepWiki/Devin access)
+- `DEEPWIKI_ENDPOINT` (defaults to `https://mcp.devin.ai/mcp` when token is present, otherwise `https://mcp.deepwiki.com/mcp`)
+
+The web UI lets users enter a GitHub repo URL and receive analysis output directly.

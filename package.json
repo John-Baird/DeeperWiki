@@ -7,9 +7,10 @@
   ],
   "scripts": {
     "dev": "concurrently -k \"npm --workspace apps/api run dev\" \"npm --workspace apps/web run dev\"",
-    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "build": "npm --workspace packages/core run build && npm --workspace apps/api run build && npm --workspace apps/web run build",
     "build:web": "npm --workspace apps/web run build",
     "build:api": "npm --workspace apps/api run build",
+    "build:core": "npm --workspace packages/core run build",
     "lint": "echo no lint configured"
   },
   "dependencies": {
