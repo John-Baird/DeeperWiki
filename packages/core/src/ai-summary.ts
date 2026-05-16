@@ -58,7 +58,55 @@ function mergeWithHeuristic(generated: AISummary, heuristic: AISummary): AISumma
     .slice(0, 8)
     .map(([file, reason]) => ({ file, reason }));
 
-  return { projectSummary, architectureMap, conventions, keyFiles };
+  return {
+    projectSummary: enforceProjectSummaryStructure(projectSummary),
+    architectureMap: enforceArchitectureStructure(architectureMap),
+    conventions: enforceConventionsStructure(conventions),
+    keyFiles
+  };
+}
+
+function splitIntoClauses(text: string): string[] {
+  return text
+    .replace(/\r/g, " ")
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 25);
+}
+
+function enforceProjectSummaryStructure(text: string): string {
+  const clauses = splitIntoClauses(text).slice(0, 4);
+  if (clauses.length === 0) return text;
+  return [
+    "Overview:",
+    ...clauses.map((clause) => `- ${clause}`)
+  ].join("\n");
+}
+
+function enforceArchitectureStructure(text: string): string {
+  const clauses = splitIntoClauses(text);
+  if (clauses.length === 0) return text;
+  return [
+    "System Layout:",
+    ...clauses.slice(0, 4).map((clause) => `- ${clause}`),
+    "Execution Flow:",
+    ...clauses.slice(4, 7).map((clause) => `- ${clause}`)
+  ].join("\n");
+}
+
+function enforceConventionsStructure(text: string): string {
+  const clauses = splitIntoClauses(text);
+  if (clauses.length === 0) return text;
+  const guidance = clauses.slice(0, 4);
+  const nextSteps = clauses.slice(4, 7);
+  return [
+    "Engineering Conventions:",
+    ...guidance.map((clause) => `- ${clause}`),
+    "How To Continue Building:",
+    ...(nextSteps.length
+      ? nextSteps.map((clause, index) => `${index + 1}. ${clause}`)
+      : ["1. Start from the highest-signal key file and trace the test/build script path."])
+  ].join("\n");
 }
 
 export async function generateAISummary(
@@ -81,6 +129,7 @@ Output requirements:
 - Include concrete continuation hints (where to start, what to run, what to edit next).
 - Include design rationale and tradeoff patterns when inferable.
 - Keep each text field dense but scannable.
+- Use short bullets/newlines inside string fields for readability.
 
 Context:
 Repo URL: ${context.summary.repoUrl}
@@ -96,9 +145,9 @@ README excerpt: ${context.readmeExcerpt.slice(0, 1200)}
 
 Respond with JSON:
 {
-  "projectSummary": "2-4 sentences: what this project is, stack, scope, and intended use.",
-  "architectureMap": "3-8 sentences covering structure tree, module relationships, and runtime/build/request flow.",
-  "conventions": "3-8 sentences covering naming/error handling/testing patterns + practical continuation guidance for next implementation steps.",
+  "projectSummary": "Format exactly as: 'Overview:' newline bullet points (3-5 bullets).",
+  "architectureMap": "Format exactly as: 'System Layout:' newline bullets (3-5), then 'Execution Flow:' newline bullets (2-4).",
+  "conventions": "Format exactly as: 'Engineering Conventions:' newline bullets (3-5), then 'How To Continue Building:' numbered steps (2-4).",
   "keyFiles": [
     {"file": "path", "reason": "specific reason tied to onboarding, architecture, or implementation flow"}
   ]

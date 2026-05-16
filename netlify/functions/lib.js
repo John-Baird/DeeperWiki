@@ -315,15 +315,15 @@ function mergeSummary(generated, fallback) {
   return {
     projectSummary:
       typeof safeGenerated.projectSummary === "string" && safeGenerated.projectSummary.trim().length > 80
-        ? sanitizeSummaryText(safeGenerated.projectSummary)
+        ? enforceProjectSummaryStructure(sanitizeSummaryText(safeGenerated.projectSummary))
         : fallback.projectSummary,
     architectureMap:
       typeof safeGenerated.architectureMap === "string" && safeGenerated.architectureMap.trim().length > 120
-        ? sanitizeSummaryText(safeGenerated.architectureMap)
+        ? enforceArchitectureStructure(sanitizeSummaryText(safeGenerated.architectureMap))
         : fallback.architectureMap,
     conventions:
       typeof safeGenerated.conventions === "string" && safeGenerated.conventions.trim().length > 120
-        ? sanitizeSummaryText(safeGenerated.conventions)
+        ? enforceConventionsStructure(sanitizeSummaryText(safeGenerated.conventions))
         : fallback.conventions,
     keyFiles: keyFiles
       .map((item) => ({
@@ -347,6 +347,46 @@ function sanitizeSummaryText(text) {
     .replace(/\s{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function splitIntoClauses(text) {
+  return String(text || "")
+    .replace(/\r/g, " ")
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 25);
+}
+
+function enforceProjectSummaryStructure(text) {
+  const clauses = splitIntoClauses(text).slice(0, 4);
+  if (!clauses.length) return text;
+  return ["Overview:", ...clauses.map((clause) => `- ${clause}`)].join("\n");
+}
+
+function enforceArchitectureStructure(text) {
+  const clauses = splitIntoClauses(text);
+  if (!clauses.length) return text;
+  return [
+    "System Layout:",
+    ...clauses.slice(0, 4).map((clause) => `- ${clause}`),
+    "Execution Flow:",
+    ...clauses.slice(4, 7).map((clause) => `- ${clause}`)
+  ].join("\n");
+}
+
+function enforceConventionsStructure(text) {
+  const clauses = splitIntoClauses(text);
+  if (!clauses.length) return text;
+  const guidance = clauses.slice(0, 4);
+  const nextSteps = clauses.slice(4, 7);
+  return [
+    "Engineering Conventions:",
+    ...guidance.map((clause) => `- ${clause}`),
+    "How To Continue Building:",
+    ...(nextSteps.length
+      ? nextSteps.map((clause, index) => `${index + 1}. ${clause}`)
+      : ["1. Start from the highest-signal key file and trace build/test scripts."])
+  ].join("\n");
 }
 
 async function buildAiSummaryWithLLM(context) {
@@ -378,9 +418,9 @@ README excerpt: ${context.readmeExcerpt.slice(0, 1200)}
 
 Return strict JSON:
 {
-  "projectSummary": "2-4 practical sentences with concrete repo details and stack",
-  "architectureMap": "4-7 practical sentences explaining module tree, high-level relationships, and developer workflow",
-  "conventions": "4-7 practical sentences explaining naming/error-handling/testing conventions and concrete continuation guidance",
+  "projectSummary": "Format exactly as: 'Overview:' newline bullet points (3-5 bullets).",
+  "architectureMap": "Format exactly as: 'System Layout:' newline bullets (3-5), then 'Execution Flow:' newline bullets (2-4).",
+  "conventions": "Format exactly as: 'Engineering Conventions:' newline bullets (3-5), then 'How To Continue Building:' numbered steps (2-4).",
   "keyFiles": [{"file":"...","reason":"..."}]
 }
 
@@ -390,6 +430,7 @@ Hard requirements:
 - Include specific next steps for a contributor.
 - Avoid generic phrases like "mixed technology stack" unless truly unknown.
 - Keep it understandable for an engineer onboarding quickly.
+- Use bullets/newlines to improve scannability.
 
 Do NOT include:
 - code blocks
